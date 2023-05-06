@@ -1,22 +1,31 @@
 import socket
 
-def run_client():
-    host = 'localhost'
-    port = 8080
+# inisialisasi socket TCP
+client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((host, port))
+# koneksi ke server
+server_address = ('localhost', 8000)
+client_socket.connect(server_address)
 
-    request_str = 'GET / HTTP/1.1\nHost: localhost\n\n'
-    client_socket.send(request_str.encode('utf-8'))
+# mengirim HTTP request ke server
+request_headers = 'GET /file.txt HTTP/1.1\r\n'
+request_headers += 'Host: localhost:8000\r\n'
+request_headers += '\r\n'
+client_socket.sendall(request_headers.encode())
 
-    response_data = client_socket.recv(1024)
-    response_str = response_data.decode('utf-8')
-    print('Received response:')
-    print(response_str)
+# menerima response dari server
+response_data = client_socket.recv(1024)
 
-    client_socket.close()
+# parsing HTTP response
+response_lines = response_data.decode().split('\n')
+response_status = response_lines[0]
+response_headers = response_lines[1:-1]
+response_content = b''.join(response_lines[-1].encode())
 
-if __name__ == '__main__':
-    run_client()
+# menampilkan response
+print(response_status)
+print(response_headers)
+print(response_content.decode())
 
+# menutup koneksi dengan server
+client_socket.close()
