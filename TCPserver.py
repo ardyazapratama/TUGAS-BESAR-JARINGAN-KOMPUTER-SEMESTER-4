@@ -1,65 +1,54 @@
 import socket
 import os
 
-def create_response(file_content, status_code):
-    response_headers = {
-        'Content-Type': 'text/html',
-        'Content-Length': len(file_content),
-        'Connection': 'close'
-    }
-    
-    response_headers_raw = ''.join('%s: %s\n' % (k, v) for k, v in response_headers.items())
-    
-    response_proto = 'HTTP/1.1'
-    response_status = status_code
-    response_status_text = 'Not Found' if status_code == '404' else 'OK'
-    response_status_raw = '%s %s %s\n' % (response_proto, response_status, response_status_text)
-    
-    response = response_status_raw + response_headers_raw + '\n' + file_content
-    
-    return response
+# inisialisasi socket TCP
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-def serve_file(file_path):
-    try:
-        with open(file_path, 'rb') as f:
-            file_content = f.read()
-            response = create_response(file_content, '200')
-    except:
-        file_content = '404 Not Found'
-        response = create_response(file_content, '404')
-        
-    return response
+# bind socket ke alamat dan port tertentu
+server_address = ('localhost', 8000)
+server_socket.bind(server_address)
 
-def run_server():
-    host = 'localhost'
-    port = 8080
+# listen untuk koneksi dari client
+server_socket.listen(1)
+print('Server is listening at', server_address)
 
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_socket.bind((host, port))
-    server_socket.listen(1)
+while True:
+    # menerima koneksi dari client
+    client_socket, client_address = server_socket.accept()
+    print('Connection from', client_address)
 
-    print('Listening on port', port)
+    # menerima data dari client
+    request_data = client_socket.recv(1024).decode()
 
-    while True:
-        client_socket, client_address = server_socket.accept()
-        request_data = client_socket.recv(1024)
-        request_str = request_data.decode('utf-8')
-        print('Received request:')
-        print(request_str)
+    # parsing HTTP request
+    request_lines = request_data.split('\n')
+    request_method, request_path, _ = request_lines[0].split()
 
-        request_lines = request_str.split('\n')
-        request_method, request_path, request_protocol = request_lines[0].split(' ')
+    # mencari file yang diminta oleh client
+    file_path = '.' + request_path
+    if os.path.isfile(file_path):
+        with open(file_path, 'rb') as file:
+            file_content = file.read()
 
-        if request_path == '/':
-            request_path = '/index.html'
-        file_path = os.getcwd() + '/public' + request_path
+        # membuat HTTP response message
+        response_headers = 'HTTP/1.1 200 OK\r\n'
+        response_headers += 'Content-Type: application/octet-stream\r\n'
+        response_headers += 'Content-Disposition: attachment; filename=' + os.path.basename(file_path) + '\r\n'
+        response_headers += 'Content-Length: ' + str(len(file_content)) + '\r\n'
+        response_headers += '\r\n'
 
-        response = serve_file(file_path)
-        client_socket.send(response.encode('utf-8'))
-        client_socket.close()
-        print('Response sent\n')
+        response_data = response_headers.encode() + file_content
 
-if __name__ == '__main__':
-    run_server()
+    else:
+        # membuat pesan 404 Not Found jika file tidak ditemukan
+        response_headers = 'HTTP/1.1 404 Not Found\r\n'
+        response_headers += 'Content-Type: text/html; charset=utf-8\r\n'
+        response_headers += '\r\n'
 
+        response_data = response_headers.encode() + b'File not found'
+
+    # mengirim response message ke client
+    client_socket.sendall(response_data)
+
+    # menutup koneksi dengan client
+    client_socket.close()
